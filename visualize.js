@@ -27,7 +27,7 @@ async function loadSessionData() {
 // Transform session to graph format
 function transformToGraphData(session) {
   const nodes = new Map();
-  const edges = [];
+  const edgesMap = new Map(); // Track edge frequency
 
   session.visits.forEach((visit, index) => {
     // Add node if not exists
@@ -47,12 +47,22 @@ function transformToGraphData(session) {
 
     // Add edge from referrer
     if (visit.referrer && visit.referrer !== visit.article) {
-      edges.push({
-        source: visit.referrer,
-        target: visit.article,
-        timestamp: visit.timestamp,
-        order: index
-      });
+      const edgeKey = `${visit.referrer}->${visit.article}`;
+      
+      if (edgesMap.has(edgeKey)) {
+        // Increment frequency for existing edge
+        const edge = edgesMap.get(edgeKey);
+        edge.frequency++;
+      } else {
+        // Create new edge
+        edgesMap.set(edgeKey, {
+          source: visit.referrer,
+          target: visit.article,
+          timestamp: visit.timestamp,
+          order: index,
+          frequency: 1
+        });
+      }
     }
   });
 
@@ -61,7 +71,7 @@ function transformToGraphData(session) {
     startedAt: session.startedAt,
     endedAt: session.endedAt,
     nodes: Array.from(nodes.values()),
-    edges: edges
+    edges: Array.from(edgesMap.values())
   };
 }
 
@@ -96,6 +106,14 @@ function getNodeColor(visitCount) {
 // Truncate text
 function truncateText(text, maxLength) {
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+}
+
+// Create curved path between two points
+function linkPath(d) {
+  const dx = d.target.x - d.source.x;
+  const dy = d.target.y - d.source.y;
+  const dr = Math.sqrt(dx * dx + dy * dy) * 1.5; // Curve radius
+  return `M${d.source.x},${d.source.y}A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
 }
 
 // Show node details
@@ -204,12 +222,16 @@ function renderGraph(data) {
     .attr('d', 'M 0,-5 L 10 ,0 L 0,5')
     .attr('fill', '#999');
 
-  // Links
+  // Links (using curved paths instead of straight lines)
   const link = g.append('g')
-    .selectAll('line')
+    .selectAll('path')
     .data(links)
-    .join('line')
+    .join('path')
     .attr('class', 'link')
+    .attr('fill', 'none')
+    .attr('stroke', '#999')
+    .attr('stroke-opacity', 0.6)
+    .attr('stroke-width', d => Math.max(2, Math.min(8, d.frequency * 2))) // Variable thickness
     .attr('marker-end', 'url(#arrowhead)');
 
   // Node groups
@@ -229,6 +251,21 @@ function renderGraph(data) {
     .attr('fill', d => getNodeColor(d.visitCount))
     .attr('stroke', '#fff')
     .attr('stroke-width', 3)
+    .style('filter', 'drop-shadow(0px 2px 4px rgba(0,0,0,0.2))')
+    .on('mouseenter', function(event, d) {
+      d3.select(this)
+        .transition()
+        .duration(200)
+        .style('filter', 'drop-shadow(0px 4px 12px rgba(102, 126, 234, 0.6))')
+        .attr('stroke-width', 4);
+    })
+    .on('mouseleave', function(event, d) {
+      d3.select(this)
+        .transition()
+        .duration(200)
+        .style('filter', 'drop-shadow(0px 2px 4px rgba(0,0,0,0.2))')
+        .attr('stroke-width', 3);
+    })
     .on('click', (event, d) => {
       event.stopPropagation();
       showNodeDetails(d);
@@ -243,12 +280,7 @@ function renderGraph(data) {
 
   // Simulation tick
   simulation.on('tick', () => {
-    link
-      .attr('x1', d => d.source.x)
-      .attr('y1', d => d.source.y)
-      .attr('x2', d => d.target.x)
-      .attr('y2', d => d.target.y);
-
+    link.attr('d', linkPath);
     node.attr('transform', d => `translate(${d.x},${d.y})`);
   });
 
