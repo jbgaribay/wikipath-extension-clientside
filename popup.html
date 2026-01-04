@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WikiPath</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>WikiPath</h1>
+      <p class="tagline">Track your Wikipedia journey</p>
+    </header>
+
+    <div class="status-section">
+      <div class="status-indicator">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Tracking active</span>
+      </div>
+      <button id="toggleTracking" class="btn btn-secondary">Pause Tracking</button>
+    </div>
+
+    <div class="stats-section">
+      <h2>Current Session</h2>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="visitCount">0</div>
+          <div class="stat-label">Articles Visited</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="duration">0m</div>
+          <div class="stat-label">Duration</div>
+        </div>
+      </div>
+
+      <div id="recentArticles" class="recent-articles">
+        <h3>Recent Articles</h3>
+        <div id="articleList" class="article-list">
+          <p class="empty-state">Start browsing Wikipedia to see your journey!</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions-section">
+      <button id="viewJourney" class="btn btn-primary" disabled>
+        View My Journey
+      </button>
+      <button id="viewHistory" class="btn btn-secondary">
+        View All Sessions
+      </button>
+      <button id="clearSession" class="btn btn-danger">
+        Clear Session
+      </button>
+    </div>
+
+    <footer>
+      <p class="sessions-count" id="sessionsCount">0 past sessions saved</p>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
