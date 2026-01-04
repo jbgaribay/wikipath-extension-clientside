@@ -1,5 +1,16 @@
 let selectedNode = null;
 
+// Playback state
+let playbackState = {
+  isPlaying: false,
+  currentStep: 0,
+  speed: 1,
+  intervalId: null,
+  visitSequence: [], // Ordered list of visits
+  nodesMap: new Map(), // Map of node elements
+  linksMap: new Map()  // Map of link elements
+};
+
 // Get session data from URL params or chrome storage
 async function loadSessionData() {
   const params = new URLSearchParams(window.location.search);
@@ -28,6 +39,7 @@ async function loadSessionData() {
 function transformToGraphData(session) {
   const nodes = new Map();
   const edgesMap = new Map(); // Track edge frequency
+  const visitSequence = []; // Ordered list for playback
 
   session.visits.forEach((visit, index) => {
     // Add node if not exists
@@ -44,6 +56,14 @@ function transformToGraphData(session) {
 
     // Increment visit count
     nodes.get(visit.article).visitCount++;
+
+    // Add to visit sequence for playback
+    visitSequence.push({
+      article: visit.article,
+      referrer: visit.referrer,
+      timestamp: visit.timestamp,
+      index: index
+    });
 
     // Add edge from referrer
     if (visit.referrer && visit.referrer !== visit.article) {
@@ -71,7 +91,8 @@ function transformToGraphData(session) {
     startedAt: session.startedAt,
     endedAt: session.endedAt,
     nodes: Array.from(nodes.values()),
-    edges: Array.from(edgesMap.values())
+    edges: Array.from(edgesMap.values()),
+    visitSequence: visitSequence
   };
 }
 
@@ -158,6 +179,189 @@ function hideNodeDetails() {
   selectedNode = null;
 }
 
+// Playback control functions
+function initializePlayback(visitSequence) {
+  playbackState.visitSequence = visitSequence;
+  playbackState.currentStep = 0;
+  
+  // Show controls
+  document.getElementById('playbackControls').classList.add('active');
+  
+  // Set up slider
+  const slider = document.getElementById('progressSlider');
+  slider.max = visitSequence.length - 1;
+  slider.value = 0;
+  
+  // Update counter
+  updateStepCounter();
+  
+  // Add event listeners
+  document.getElementById('playButton').addEventListener('click', togglePlayback);
+  document.getElementById('progressSlider').addEventListener('input', onSliderChange);
+  
+  // Speed buttons
+  document.querySelectorAll('.speed-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      playbackState.speed = parseFloat(this.dataset.speed);
+      
+      // Restart playback with new speed if playing
+      if (playbackState.isPlaying) {
+        stopPlayback();
+        startPlayback();
+      }
+    });
+  });
+  
+  // Initialize all nodes and links as hidden/dim
+  // Don't reset yet - let user see the full graph first
+}
+
+function togglePlayback() {
+  if (playbackState.isPlaying) {
+    stopPlayback();
+  } else {
+    startPlayback();
+  }
+}
+
+function startPlayback() {
+  playbackState.isPlaying = true;
+  const playButton = document.getElementById('playButton');
+  playButton.textContent = '⏸ Pause';
+  playButton.classList.add('playing');
+  
+  // If at the end, restart from beginning
+  if (playbackState.currentStep >= playbackState.visitSequence.length - 1) {
+    playbackState.currentStep = -1; // Will increment to 0 on first tick
+  }
+  
+  // Reset visualization on first play
+  if (playbackState.currentStep === -1 || playbackState.currentStep === 0) {
+    resetVisualization();
+  }
+  
+  // Start interval
+  const baseInterval = 1000; // 1 second per step at 1x speed
+  const interval = baseInterval / playbackState.speed;
+  
+  playbackState.intervalId = setInterval(() => {
+    if (playbackState.currentStep < playbackState.visitSequence.length - 1) {
+      playbackState.currentStep++;
+      updatePlaybackVisualization();
+      updateStepCounter();
+      document.getElementById('progressSlider').value = playbackState.currentStep;
+    } else {
+      stopPlayback();
+    }
+  }, interval);
+}
+
+function stopPlayback() {
+  playbackState.isPlaying = false;
+  const playButton = document.getElementById('playButton');
+  playButton.textContent = '▶ Play Journey';
+  playButton.classList.remove('playing');
+  
+  if (playbackState.intervalId) {
+    clearInterval(playbackState.intervalId);
+    playbackState.intervalId = null;
+  }
+}
+
+function onSliderChange(event) {
+  const newStep = parseInt(event.target.value);
+  playbackState.currentStep = newStep;
+  
+  // Stop playback if playing
+  if (playbackState.isPlaying) {
+    stopPlayback();
+  }
+  
+  // Update visualization to show all steps up to current
+  resetVisualization();
+  for (let i = 0; i <= newStep; i++) {
+    showStepVisualization(i, i === newStep);
+  }
+  
+  updateStepCounter();
+}
+
+function updateStepCounter() {
+  const counter = document.getElementById('stepCounter');
+  const total = playbackState.visitSequence.length;
+  counter.textContent = `Step ${playbackState.currentStep + 1} of ${total}`;
+}
+
+function resetVisualization() {
+  // Dim all nodes and hide all links initially
+  playbackState.nodesMap.forEach((nodeElement, nodeId) => {
+    nodeElement.select('circle')
+      .classed('node-active', false)
+      .transition()
+      .duration(300)
+      .style('opacity', 0.2)
+      .attr('stroke-width', 3);
+  });
+  
+  playbackState.linksMap.forEach((linkElement) => {
+    linkElement.transition()
+      .duration(300)
+      .style('opacity', 0)
+      .attr('stroke-width', 0);
+  });
+}
+
+function updatePlaybackVisualization() {
+  showStepVisualization(playbackState.currentStep, true);
+}
+
+function showStepVisualization(stepIndex, isCurrentStep) {
+  const visit = playbackState.visitSequence[stepIndex];
+  
+  // Show/highlight the node
+  const nodeElement = playbackState.nodesMap.get(visit.article);
+  if (nodeElement) {
+    nodeElement.select('circle')
+      .classed('node-active', isCurrentStep)
+      .transition()
+      .duration(300)
+      .style('opacity', 1)
+      .attr('stroke-width', isCurrentStep ? 5 : 3);
+  }
+  
+  // Show the edge if there's a referrer
+  if (visit.referrer) {
+    const edgeKey = `${visit.referrer}->${visit.article}`;
+    const linkElement = playbackState.linksMap.get(edgeKey);
+    
+    if (linkElement) {
+      const linkData = linkElement.datum();
+      const strokeWidth = Math.max(2, Math.min(8, linkData.frequency * 2));
+      
+      linkElement
+        .transition()
+        .duration(500)
+        .style('opacity', 0.6)
+        .attr('stroke-width', strokeWidth);
+    }
+  }
+  
+  // Remove active state from previous step
+  if (stepIndex > 0 && isCurrentStep) {
+    const prevVisit = playbackState.visitSequence[stepIndex - 1];
+    const prevNodeElement = playbackState.nodesMap.get(prevVisit.article);
+    if (prevNodeElement) {
+      prevNodeElement.select('circle')
+        .classed('node-active', false)
+        .transition()
+        .duration(300)
+        .attr('stroke-width', 3);
+    }
+  }
+}
+
 // Render graph
 function renderGraph(data) {
   document.getElementById('loading').style.display = 'none';
@@ -234,6 +438,12 @@ function renderGraph(data) {
     .attr('stroke-width', d => Math.max(2, Math.min(8, d.frequency * 2))) // Variable thickness
     .attr('marker-end', 'url(#arrowhead)');
 
+  // Store link references for playback
+  link.each(function(d) {
+    const edgeKey = `${d.source.id || d.source}->${d.target.id || d.target}`;
+    playbackState.linksMap.set(edgeKey, d3.select(this));
+  });
+
   // Node groups
   const node = g.append('g')
     .selectAll('g')
@@ -243,6 +453,11 @@ function renderGraph(data) {
       .on('start', dragstarted)
       .on('drag', dragged)
       .on('end', dragended));
+
+  // Store node references for playback
+  node.each(function(d) {
+    playbackState.nodesMap.set(d.id, d3.select(this));
+  });
 
   // Circles
   node.append('circle')
@@ -321,6 +536,13 @@ function renderGraph(data) {
 
   // Click background to close panel
   svg.on('click', hideNodeDetails);
+  
+  // Initialize playback controls
+  if (data.visitSequence && data.visitSequence.length > 0) {
+    setTimeout(() => {
+      initializePlayback(data.visitSequence);
+    }, 1000); // Wait for initial auto-fit animation
+  }
 }
 
 // Initialize when DOM is ready
