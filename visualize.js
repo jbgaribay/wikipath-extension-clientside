@@ -11,6 +11,13 @@ let playbackState = {
   linksMap: new Map()  // Map of link elements
 };
 
+// Hover preview state
+let hoverPreviewState = {
+  cache: new Map(), // Cache article summaries
+  currentTimeout: null,
+  isVisible: false
+};
+
 // Get session data from URL params or chrome storage
 async function loadSessionData() {
   const params = new URLSearchParams(window.location.search);
@@ -177,6 +184,96 @@ function hideNodeDetails() {
   const panel = document.querySelector('.node-panel');
   if (panel) panel.remove();
   selectedNode = null;
+}
+
+// Hover preview functions
+async function fetchWikipediaSummary(title, language = 'en') {
+  const cacheKey = `${language}:${title}`;
+  
+  // Check cache first
+  if (hoverPreviewState.cache.has(cacheKey)) {
+    return hoverPreviewState.cache.get(cacheKey);
+  }
+  
+  try {
+    const url = `https://${language}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch summary');
+    }
+    
+    const data = await response.json();
+    const summary = {
+      title: data.title,
+      extract: data.extract,
+      thumbnail: data.thumbnail?.source
+    };
+    
+    // Cache the result
+    hoverPreviewState.cache.set(cacheKey, summary);
+    return summary;
+  } catch (error) {
+    console.error('Error fetching Wikipedia summary:', error);
+    return null;
+  }
+}
+
+function showHoverPreview(node, event) {
+  // Clear any existing timeout
+  if (hoverPreviewState.currentTimeout) {
+    clearTimeout(hoverPreviewState.currentTimeout);
+  }
+  
+  // Set a small delay before showing
+  hoverPreviewState.currentTimeout = setTimeout(async () => {
+    const preview = document.getElementById('hoverPreview');
+    const titleEl = document.getElementById('previewTitle');
+    const contentEl = document.getElementById('previewContent');
+    
+    // Position tooltip near cursor
+    const offsetX = 15;
+    const offsetY = 15;
+    preview.style.left = (event.pageX + offsetX) + 'px';
+    preview.style.top = (event.pageY + offsetY) + 'px';
+    
+    // Show loading state
+    titleEl.textContent = node.label;
+    contentEl.innerHTML = '<div class="hover-preview-loading">Loading summary...</div>';
+    preview.classList.add('visible');
+    hoverPreviewState.isVisible = true;
+    
+    // Fetch and display summary
+    const summary = await fetchWikipediaSummary(node.label, node.language);
+    
+    if (summary && hoverPreviewState.isVisible) {
+      contentEl.textContent = summary.extract || 'No summary available.';
+    } else if (hoverPreviewState.isVisible) {
+      contentEl.innerHTML = '<div class="hover-preview-error">Could not load summary</div>';
+    }
+  }, 300); // 300ms delay
+}
+
+function hideHoverPreview() {
+  // Clear timeout if exists
+  if (hoverPreviewState.currentTimeout) {
+    clearTimeout(hoverPreviewState.currentTimeout);
+    hoverPreviewState.currentTimeout = null;
+  }
+  
+  const preview = document.getElementById('hoverPreview');
+  preview.classList.remove('visible');
+  hoverPreviewState.isVisible = false;
+}
+
+function updateHoverPreviewPosition(event) {
+  if (hoverPreviewState.isVisible) {
+    const preview = document.getElementById('hoverPreview');
+    const offsetX = 15;
+    const offsetY = 15;
+    preview.style.left = (event.pageX + offsetX) + 'px';
+    preview.style.top = (event.pageY + offsetY) + 'px';
+  }
 }
 
 // Playback control functions
@@ -473,6 +570,12 @@ function renderGraph(data) {
         .duration(200)
         .style('filter', 'drop-shadow(0px 4px 12px rgba(102, 126, 234, 0.6))')
         .attr('stroke-width', 4);
+      
+      // Show hover preview
+      showHoverPreview(d, event);
+    })
+    .on('mousemove', function(event, d) {
+      updateHoverPreviewPosition(event);
     })
     .on('mouseleave', function(event, d) {
       d3.select(this)
@@ -480,9 +583,13 @@ function renderGraph(data) {
         .duration(200)
         .style('filter', 'drop-shadow(0px 2px 4px rgba(0,0,0,0.2))')
         .attr('stroke-width', 3);
+      
+      // Hide hover preview
+      hideHoverPreview();
     })
     .on('click', (event, d) => {
       event.stopPropagation();
+      hideHoverPreview(); // Hide preview when clicking
       showNodeDetails(d);
     });
 

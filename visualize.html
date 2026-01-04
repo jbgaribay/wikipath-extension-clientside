@@ -443,6 +443,64 @@
       }
     }
 
+    /* Hover Preview Tooltip */
+    .hover-preview {
+      position: fixed;
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+      max-width: 350px;
+      z-index: 1000;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease-in-out;
+    }
+
+    .hover-preview.visible {
+      opacity: 1;
+    }
+
+    .hover-preview-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #333;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #667eea;
+    }
+
+    .hover-preview-content {
+      font-size: 13px;
+      color: #555;
+      line-height: 1.5;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+
+    .hover-preview-loading {
+      font-size: 13px;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      padding: 10px;
+    }
+
+    .hover-preview-error {
+      font-size: 12px;
+      color: #dc3545;
+      font-style: italic;
+    }
+
+    .hover-preview-footer {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid #e9ecef;
+      font-size: 11px;
+      color: #999;
+      text-align: right;
+    }
+
     @media (max-width: 768px) {
       .node-panel {
         top: auto;
@@ -539,6 +597,13 @@
 
     <div class="controls-hint">
       💡 Drag nodes • Scroll to zoom • Click node for details
+    </div>
+
+    <!-- Hover Preview Tooltip -->
+    <div class="hover-preview" id="hoverPreview">
+      <div class="hover-preview-title" id="previewTitle"></div>
+      <div class="hover-preview-content" id="previewContent"></div>
+      <div class="hover-preview-footer">Wikipedia</div>
     </div>
   </div>
 
